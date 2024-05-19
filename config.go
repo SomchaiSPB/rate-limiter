@@ -1,5 +1,11 @@
 package rate_limiter
 
+const (
+	maxMsgPerSen               = 5
+	maxReqPerMin               = 10000
+	maxFailedTransactionPerDay = 3
+)
+
 type Config struct {
 	MaxMessagesPerSec           int
 	MaxRequestsPerMin           int
@@ -23,8 +29,8 @@ func (c Config) WithMaxFailedTransactions(maxTrans int) Config {
 
 func NewConfig() Config {
 	return Config{
-		MaxMessagesPerSec:           5,
-		MaxRequestsPerMin:           10000,
-		MaxFailedTransactionsPerDay: 3,
+		MaxMessagesPerSec:           maxMsgPerSen,
+		MaxRequestsPerMin:           maxReqPerMin,
+		MaxFailedTransactionsPerDay: maxFailedTransactionPerDay,
 	}
 }
