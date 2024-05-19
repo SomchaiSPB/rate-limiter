@@ -74,7 +74,7 @@ func TestRateLimiter(t *testing.T) {
 			expectedCode: http.StatusTooManyRequests,
 		},
 		{
-			name:        "Empty request type, ok",
+			name:        "Empty request type, ok", // There are no requirements for this case
 			ip:          "192.168.1.5",
 			userID:      "user5",
 			requestType: "",
