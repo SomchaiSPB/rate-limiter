@@ -29,6 +29,27 @@ The rate limits are defined with default config in the code. You can change thes
 	// Rest of the code
 ```
 
+## Storage
+
+By default, rate limiter uses in memory storage with a sync.Map.
+
+For other types of storage, such as Redis or other distributed storages, you should implement interface:
+```go
+type Storage interface {
+	LoadOrStore(key, value any) (actual any, loaded bool)
+	Store(key, value any)
+	Reset()
+}
+```
+
+Then you can inject your storage into a rate limiter:
+```go
+conf := NewConfig()
+redisStorage := NewRedisStorage() // Your redis storage implementation
+
+rm := NewRateLimiterWithConfig(conf, redisStorage)
+```
+
 ## Usage
 
 To use the rate limiter, wrap your HTTP handler with the `RateLimiterMiddleware` middleware.

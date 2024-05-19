@@ -13,7 +13,7 @@ func TestRateLimiter(t *testing.T) {
 		WithMaxRequests(10).
 		WithMaxFailedTransactions(1)
 
-	rm := NewRateLimiterWithConfig(conf)
+	rm := NewRateLimiterWithConfig(conf, newStorage())
 
 	type test struct {
 		name         string
@@ -40,7 +40,7 @@ func TestRateLimiter(t *testing.T) {
 			requestType: messageRequest,
 			simulateFn: func() {
 				now := time.Now()
-				ipCount, _ := rm.ipRequests.LoadOrStore("192.168.1.2", &RateCounter{lastTime: now})
+				ipCount, _ := rm.storage.LoadOrStore("192.168.1.2", &RateCounter{lastTime: now})
 				ipCounter := ipCount.(*RateCounter)
 				for i := 0; i < conf.MaxRequestsPerMin; i++ {
 					ipCounter.allow(conf.MaxRequestsPerMin, time.Minute)
@@ -55,7 +55,7 @@ func TestRateLimiter(t *testing.T) {
 			requestType: messageRequest,
 			simulateFn: func() {
 				now := time.Now()
-				messageCount, _ := rm.userMessages.LoadOrStore("user3", &RateCounter{lastTime: now})
+				messageCount, _ := rm.storage.LoadOrStore(messageRequest+"user3", &RateCounter{lastTime: now})
 				messageCounter := messageCount.(*RateCounter)
 				for i := 0; i <= conf.MaxMessagesPerSec; i++ {
 					messageCounter.allow(conf.MaxMessagesPerSec, time.Second)
@@ -69,7 +69,7 @@ func TestRateLimiter(t *testing.T) {
 			userID:      "user4",
 			requestType: transactionRequest,
 			simulateFn: func() {
-				rm.userFailures.Store("user4", conf.MaxFailedTransactionsPerDay)
+				rm.storage.Store(transactionRequest+"user4", &RateCounter{lastTime: time.Now(), count: conf.MaxFailedTransactionsPerDay})
 			},
 			expectedCode: http.StatusTooManyRequests,
 		},
@@ -79,7 +79,6 @@ func TestRateLimiter(t *testing.T) {
 			userID:      "user5",
 			requestType: "",
 			simulateFn: func() {
-
 			},
 			expectedCode: http.StatusOK,
 		},

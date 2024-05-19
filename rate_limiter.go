@@ -2,7 +2,6 @@ package rate_limiter
 
 import (
 	"net/http"
-	"sync"
 	"time"
 )
 
@@ -11,32 +10,29 @@ const (
 	messageRequest     = "message"
 )
 
+type Storage interface {
+	LoadOrStore(key, value any) (actual any, loaded bool)
+	Store(key, value any)
+	Reset()
+}
+
 // RateLimiter main struct for storing user rate limit data
 type RateLimiter struct {
-	config          Config
-	ipRequests      sync.Map
-	userMessages    sync.Map
-	userFailures    sync.Map
-	userLastFailure sync.Map
+	config  Config
+	storage Storage
 }
 
 func NewRateLimiter() *RateLimiter {
 	return &RateLimiter{
-		config:          NewConfig(),
-		ipRequests:      sync.Map{},
-		userFailures:    sync.Map{},
-		userLastFailure: sync.Map{},
-		userMessages:    sync.Map{},
+		config:  NewConfig(),
+		storage: newStorage(),
 	}
 }
 
-func NewRateLimiterWithConfig(config Config) *RateLimiter {
+func NewRateLimiterWithConfig(config Config, storage Storage) *RateLimiter {
 	return &RateLimiter{
-		config:          config,
-		ipRequests:      sync.Map{},
-		userFailures:    sync.Map{},
-		userLastFailure: sync.Map{},
-		userMessages:    sync.Map{},
+		config:  config,
+		storage: storage,
 	}
 }
 
@@ -58,7 +54,7 @@ func (r *RateLimiter) RateLimiterMiddleware(next http.Handler) http.Handler {
 func (r *RateLimiter) allowRequest(ip, userID, requestType string) (bool, int) {
 	now := time.Now()
 
-	ipCount, _ := r.ipRequests.LoadOrStore(ip, &RateCounter{lastTime: now})
+	ipCount, _ := r.storage.LoadOrStore(ip, &RateCounter{lastTime: now})
 	ipCounter := ipCount.(*RateCounter)
 
 	if !ipCounter.allow(r.config.MaxRequestsPerMin, time.Minute) {
@@ -67,24 +63,26 @@ func (r *RateLimiter) allowRequest(ip, userID, requestType string) (bool, int) {
 
 	switch requestType {
 	case messageRequest:
-		messageCount, _ := r.userMessages.LoadOrStore(userID, &RateCounter{lastTime: now})
+		key := requestType + userID
+		messageCount, _ := r.storage.LoadOrStore(key, &RateCounter{lastTime: now})
 		messageCounter := messageCount.(*RateCounter)
 
 		if !messageCounter.allow(r.config.MaxMessagesPerSec, time.Second) {
 			return false, http.StatusTooManyRequests
 		}
 	case transactionRequest:
-		userFailureCount, _ := r.userFailures.LoadOrStore(userID, 0)
-		r.userFailures.Store(userID, userFailureCount.(int)+1)
+		key := requestType + userID
+		userFailureCount, _ := r.storage.LoadOrStore(key, &RateCounter{lastTime: now})
+		transactionCounter := userFailureCount.(*RateCounter)
+		transactionCounter.count += 1
+		r.storage.Store(userID, transactionCounter)
 
-		if userFailureCount.(int) >= r.config.MaxFailedTransactionsPerDay {
-			return false, http.StatusTooManyRequests
+		if now.Sub(transactionCounter.lastTime) >= 24*time.Hour {
+			r.storage.Store(userID, 0)
 		}
 
-		lastFailure, _ := r.userLastFailure.LoadOrStore(userID, now)
-
-		if now.Sub(lastFailure.(time.Time)) >= 24*time.Hour {
-			r.userFailures.Store(userID, 0)
+		if userFailureCount.(*RateCounter).count > r.config.MaxFailedTransactionsPerDay {
+			return false, http.StatusTooManyRequests
 		}
 	}
 
@@ -92,8 +90,5 @@ func (r *RateLimiter) allowRequest(ip, userID, requestType string) (bool, int) {
 }
 
 func (r *RateLimiter) resetCounters() {
-	r.userFailures = sync.Map{}
-	r.ipRequests = sync.Map{}
-	r.userMessages = sync.Map{}
-	r.userLastFailure = sync.Map{}
+	r.storage.Reset()
 }
