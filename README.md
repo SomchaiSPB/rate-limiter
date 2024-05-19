@@ -5,7 +5,11 @@ This is a simple rate limiter implemented in Go using the standard library. It l
 - 10,000 requests per minute per IP address
 - 3 failed transactions per user per day
 
-For user limits, please include "X-User-ID" into a request header
+For user limits, please include "X-User-ID" into a request header.
+
+To determine request type: ```message``` or ```transaction```, please include "X-Request-Type" header
+
+Requests with empty or other "X-Request-Type" will be treated as http.StatusOK (200) as long as IP address is allowed.
 
 ## Getting started
 ```shell
